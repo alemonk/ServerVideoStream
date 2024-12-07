@@ -7,7 +7,7 @@ from threading import Thread
 from scripts.gpio import GPIOHandler
 
 HOST = "192.168.1.93"
-HTTP_PORT = 9999
+HTTP_PORT = 80
 WEBSOCKET_PORT = 8888
 
 # Directory to serve static files

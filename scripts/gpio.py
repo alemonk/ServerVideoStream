@@ -5,6 +5,7 @@ class GPIOHandler:
     def __init__(self):
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(26, GPIO.OUT)
+        GPIO.setup(4, GPIO.IN)
 
     def set_gpio_26(self, value: bool):
         if value:
@@ -12,6 +13,9 @@ class GPIOHandler:
         else:
             GPIO.output(26, GPIO.LOW)   # Set GPIO 26 LOW
         print(f"GPIO 26 set to {value}")
+    
+    def read_gpio(self, gpio_number):
+        return GPIO.input(gpio_number)
 
     def cleanup(self):
         """Clean up GPIO settings before exiting."""
@@ -21,6 +25,7 @@ class GPIOHandler:
 if __name__ == "__main__":
     gpio_handler = GPIOHandler()
     gpio_handler.set_gpio_26(True)  # Set GPIO 26 HIGH
+    print(gpio_handler.read_gpio(4))
 
     # Add your logic here
     time.sleep(0.5)
