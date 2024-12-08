@@ -44,3 +44,27 @@ document.addEventListener("DOMContentLoaded", function () {
         ws.send(JSON.stringify({ state: currentState }));
     });
 });
+
+// Video stream
+document.addEventListener("DOMContentLoaded", function () {
+    const videoStream = document.getElementById("video-stream");
+
+    function fetchFrame() {
+        fetch("/image_frame")
+            .then((response) => {
+                if (response.ok) {
+                    return response.blob();
+                }
+                throw new Error("Failed to fetch frame");
+            })
+            .then((blob) => {
+                videoStream.src = URL.createObjectURL(blob);
+            })
+            .catch((error) => {
+                console.error("Error fetching frame:", error);
+            });
+    }
+
+    // Update the video stream periodically
+    setInterval(fetchFrame, 1000);
+});

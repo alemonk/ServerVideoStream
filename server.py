@@ -3,8 +3,13 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
 import json
 from websockets.asyncio.server import serve
+import websockets.exceptions
 from threading import Thread
 from scripts.gpio import GPIOHandler
+from scripts import cam
+import cv2
+from io import BytesIO
+from PIL import Image
 
 HOST = "192.168.1.93"
 HTTP_PORT = 80
@@ -27,6 +32,23 @@ class NeuralHTTP(SimpleHTTPRequestHandler):
             self.send_header("Content-type", "application/json")
             self.end_headers()
             self.wfile.write(bytes(json.dumps(TOGGLE_STATE), "utf-8"))
+            
+        elif self.path == "/image_frame":
+            # Serve the current camera frame
+            frame = cam.capture_frame()
+            if frame is None:
+                self.send_error(500, "Failed to capture frame")
+                return
+
+            # Convert the frame to JPEG
+            _, buffer = cv2.imencode('.jpg', frame)
+
+            # Send the image as the HTTP response
+            self.send_response(200)
+            self.send_header("Content-type", "image/jpeg")
+            self.end_headers()
+            self.wfile.write(buffer.tobytes())
+
         else:
             super().do_GET()
 
@@ -59,30 +81,33 @@ def update_state(new_state):
 connected_clients = set()
 
 async def websocket_handler(websocket):
-    # Register client
     connected_clients.add(websocket)
     try:
-        # Send the initial state
         await websocket.send(json.dumps(TOGGLE_STATE))
         async for message in websocket:
             data = json.loads(message)
             if "state" in data:
                 update_state(data["state"])
+    except websockets.exceptions.ConnectionClosedError as e:
+        print(f"WebSocket connection closed: {e}")
     finally:
         connected_clients.remove(websocket)
+        print(f"Removed WebSocket {websocket}")
 
 async def notify_clients(state):
     """
     Notify all connected WebSocket clients about a state change.
     """
-    if connected_clients:  # Only send if clients are connected
+    if connected_clients:
         message = json.dumps({"state": state})
-        tasks = [asyncio.create_task(client.send(message)) for client in connected_clients]
-        try:
-            # Await all tasks and handle exceptions
-            await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception as e:
-            print(f"Error notifying clients: {e}")
+        tasks = []
+        for client in connected_clients:
+            try:
+                tasks.append(asyncio.create_task(client.send(message)))
+            except websockets.exceptions.ConnectionClosedError as e:
+                print(f"Failed to notify a client: {e}")
+                connected_clients.remove(client)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 def run_http_server():
     os.chdir(STATIC_DIR)  # Serve static files
@@ -92,7 +117,7 @@ def run_http_server():
 
 async def run_websocket_server():
     print(f"WebSocket server running on ws://{HOST}:{WEBSOCKET_PORT}")
-    async with serve(websocket_handler, HOST, WEBSOCKET_PORT) as server:
+    async with serve(websocket_handler, HOST, WEBSOCKET_PORT, ping_interval=20, ping_timeout=60) as server:
         await server.serve_forever()
 
 if __name__ == "__main__":

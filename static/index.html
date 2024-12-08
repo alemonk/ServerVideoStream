@@ -11,8 +11,11 @@
     <h1>Raspberry Pi Web Server</h1>
     
     <!-- Image -->
-    <img src="images/image.png" alt="Static Image" id="image-display">
+    <!-- <img src="images/image.png" alt="Static Image" id="image-display"> -->
 
+    <!-- Video Stream -->
+    <img id="video-stream" src="/image_frame" alt="Live Stream" style="max-width: 100%; height: auto;">
+    
     <!-- Switch button -->
     <div>
         <label class="switch">
@@ -24,6 +27,7 @@
     <!-- Date and time -->
     <div id="datetime-display" style="margin-top: 20px; font-size: 18px; font-family: Arial, sans-serif;"></div>
 
+    <script src="https://cdn.socket.io/4.5.1/socket.io.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
