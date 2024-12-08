@@ -10,6 +10,7 @@ from scripts import cam
 import cv2
 from io import BytesIO
 from PIL import Image
+import time
 
 HOST = "192.168.1.93"
 HTTP_PORT = 80
@@ -32,7 +33,7 @@ class NeuralHTTP(SimpleHTTPRequestHandler):
             self.send_header("Content-type", "application/json")
             self.end_headers()
             self.wfile.write(bytes(json.dumps(TOGGLE_STATE), "utf-8"))
-            
+
         elif self.path == "/image_frame":
             # Serve the current camera frame
             frame = cam.capture_frame()
@@ -121,6 +122,11 @@ async def run_websocket_server():
         await server.serve_forever()
 
 if __name__ == "__main__":
+    # Startup routine
+    gpio_handler.set_gpio_26(True)
+    time.sleep(0.5)
+    gpio_handler.set_gpio_26(False)
+
     # Run HTTP server in a separate thread
     http_thread = Thread(target=run_http_server, daemon=True)
     http_thread.start()
