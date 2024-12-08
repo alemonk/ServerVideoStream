@@ -6,7 +6,7 @@ from websockets.asyncio.server import serve
 import websockets.exceptions
 from threading import Thread
 from scripts.gpio import GPIOHandler
-from scripts import cam
+from scripts.cam import CameraCapture
 import cv2
 from io import BytesIO
 from PIL import Image
@@ -22,8 +22,9 @@ STATIC_DIR = "./static"
 # Shared state for the toggle
 TOGGLE_STATE = {"state": False}  # False = OFF, True = ON
 
-# Setup GPIO
+# Setup GPIO and camera
 gpio_handler = GPIOHandler()
+camera = CameraCapture()
 
 class NeuralHTTP(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -36,7 +37,7 @@ class NeuralHTTP(SimpleHTTPRequestHandler):
 
         elif self.path == "/image_frame":
             # Serve the current camera frame
-            frame = cam.capture_frame()
+            frame = camera.capture_frame()
             if frame is None:
                 self.send_error(500, "Failed to capture frame")
                 return
