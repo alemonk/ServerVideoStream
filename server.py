@@ -6,11 +6,12 @@ from websockets.asyncio.server import serve
 import websockets.exceptions
 from threading import Thread
 from scripts.gpio import GPIOHandler
-from scripts.cam import CameraCapture
+from scripts.cam import capture_single_image
 import cv2
 from io import BytesIO
 from PIL import Image
 import time
+import io
 
 HOST = "192.168.1.93"
 HTTP_PORT = 80
@@ -24,7 +25,6 @@ TOGGLE_STATE = {"state": False}  # False = OFF, True = ON
 
 # Setup GPIO and camera
 gpio_handler = GPIOHandler()
-camera = CameraCapture()
 
 class NeuralHTTP(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -36,20 +36,21 @@ class NeuralHTTP(SimpleHTTPRequestHandler):
             self.wfile.write(bytes(json.dumps(TOGGLE_STATE), "utf-8"))
 
         elif self.path == "/image_frame":
-            # Serve the current camera frame
-            frame = camera.capture_frame()
-            if frame is None:
-                self.send_error(500, "Failed to capture frame")
-                return
+            # Serve the static image file
+            try:
+                output_file = os.path.join(os.getcwd(), "img.jpg")
+                with open(output_file, "rb") as file:
+                    image_data = file.read()
 
-            # Convert the frame to JPEG
-            _, buffer = cv2.imencode('.jpg', frame)
-
-            # Send the image as the HTTP response
-            self.send_response(200)
-            self.send_header("Content-type", "image/jpeg")
-            self.end_headers()
-            self.wfile.write(buffer.tobytes())
+                self.send_response(200)
+                self.send_header("Content-type", "image/jpeg")
+                self.send_header("Content-length", str(len(image_data)))
+                self.end_headers()
+                self.wfile.write(image_data)
+            except FileNotFoundError:
+                self.send_error(404, "Image file not found")
+            except Exception as e:
+                self.send_error(500, f"Internal server error: {str(e)}")
 
         else:
             super().do_GET()
@@ -68,16 +69,27 @@ class NeuralHTTP(SimpleHTTPRequestHandler):
         else:
             self.send_error(404, "Endpoint not found")
 
-def update_state(new_state):
+async def update_state(new_state):
     """
     Update the toggle state and notify WebSocket clients.
     """
     TOGGLE_STATE["state"] = new_state
     print(f"Toggle state updated to: {TOGGLE_STATE['state']}")
-    gpio_handler.set_gpio_26(new_state)
 
-    # Schedule notify_clients without blocking the event loop
-    asyncio.create_task(notify_clients(new_state))
+    # Notify clients of the new state
+    await notify_clients(new_state)
+
+    # Perform capture when toggled on
+    if new_state:
+        gpio_handler.set_gpio_26(True)  # Turn on GPIO
+        await asyncio.sleep(0.1)  # Small delay for hardware stability
+
+        try:
+            capture_single_image()  # Capture the image
+        finally:
+            gpio_handler.set_gpio_26(False)  # Turn off GPIO
+            TOGGLE_STATE["state"] = False  # Reset toggle state
+            await notify_clients(False)  # Notify clients of the completed state
 
 # List of connected WebSocket clients
 connected_clients = set()
@@ -89,7 +101,7 @@ async def websocket_handler(websocket):
         async for message in websocket:
             data = json.loads(message)
             if "state" in data:
-                update_state(data["state"])
+                await update_state(data["state"])
     except websockets.exceptions.ConnectionClosedError as e:
         print(f"WebSocket connection closed: {e}")
     finally:
